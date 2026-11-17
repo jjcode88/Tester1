@@ -1,0 +1,92 @@
+# Uptime monitor. Checks the live site every 15 minutes. When it goes down, an
+# issue labelled "incident" is opened (GitHub notifies watchers); when it comes
+# back, the issue is closed with the outage duration. The in-app Status page
+# reads this workflow's run history and those issues.
+name: Uptime
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the site
+        id: site
+        run: |
+          url="${{ vars.SITE_URL }}"
+          if [ -z "$url" ]; then
+            url="$(gh api "repos/$GH_REPO/pages" --jq .html_url 2>/dev/null || true)"
+          fi
+          if [ -z "$url" ]; then
+            # Nothing deployed yet. Cancel rather than pass, so the history
+            # does not count this as a successful check.
+            echo "::notice::GitHub Pages is not set up yet; skipping this check."
+            gh run cancel "${{ github.run_id }}"
+            sleep 60
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Check health
+        id: health
+        run: |
+          set +e
+          verdict="$(scripts/check-health.sh "${{ steps.site.outputs.url }}")"
+          code=$?
+          echo "$verdict"
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+          echo "up=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Open or close the incident
+        env:
+          UP: ${{ steps.health.outputs.up }}
+          VERDICT: ${{ steps.health.outputs.verdict }}
+          URL: ${{ steps.site.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create incident --color B60205 --description "Opened by the uptime monitor" 2>/dev/null || true
+          open="$(gh issue list --label incident --state open --json number,createdAt --jq '.[0] // empty')"
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          if [ "$UP" = "true" ]; then
+            if [ -n "$open" ]; then
+              number="$(jq -r .number <<<"$open")"
+              opened="$(jq -r .createdAt <<<"$open")"
+              minutes=$(( ( $(date -d "$now" +%s) - $(date -d "$opened" +%s) ) / 60 ))
+              gh issue comment "$number" --body "Resolved at $now after about $minutes minutes. $VERDICT ([check]($RUN_URL))"
+              gh issue close "$number" --reason completed
+            fi
+          elif [ -z "$open" ]; then
+            gh issue create --label incident \
+              --title "Site down: $URL" \
+              --body "The uptime monitor could not reach the site at $now.
+
+          **Result:** $VERDICT
+          **Check:** $RUN_URL
+
+          This issue closes itself when the site answers again."
+          else
+            gh issue comment "$(jq -r .number <<<"$open")" --body "Still down at $now. $VERDICT ([check]($RUN_URL))"
+          fi
+
+      - name: Fail when the site is down
+        if: steps.health.outputs.up != 'true'
+        run: exit 1

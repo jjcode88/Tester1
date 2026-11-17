@@ -1,0 +1,18 @@
+/// <reference types="vite/client" />
+
+declare const __APP_VERSION__: string;
+declare const __APP_COMMIT__: string;
+declare const __APP_RELEASE__: string;
+declare const __APP_BUILT_AT__: string;
+
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL?: string;
+  readonly VITE_SUPABASE_ANON_KEY?: string;
+  readonly VITE_SENTRY_DSN?: string;
+  readonly VITE_ENVIRONMENT?: string;
+  readonly VITE_GITHUB_REPO?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
