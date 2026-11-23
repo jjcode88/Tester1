@@ -1,3 +1,6 @@
+# Dependabot proposes updates; .github/workflows/auto-update.yml merges the
+# small ones once every test passes. Major versions arrive as separate pull
+# requests and wait for review.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -5,9 +8,13 @@ updates:
     schedule:
       interval: weekly
     groups:
-      dependencies:
-        patterns: ['*']
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

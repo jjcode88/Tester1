@@ -1,0 +1,81 @@
+# Accepts Dependabot's small updates on its own. When the CI workflow passes
+# on a Dependabot pull request, this checks the update is a patch or minor
+# version (scripts/update-policy.mjs), merges exactly the commit that was
+# tested, and starts CI on the default branch so the update is published.
+# Major updates are left open with a comment, for a person to review.
+name: Auto-update
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      # The policy script comes from the default branch, never from the pull request.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts
+
+      - name: Find the pull request
+        id: pr
+        run: |
+          pr="$(gh pr list --head "$HEAD_BRANCH" --state open --json number,author,title,headRefOid \
+            --jq '.[] | select(.author.login == "app/dependabot" or .author.login == "dependabot[bot]")')"
+          if [ -z "$pr" ]; then echo "No open Dependabot pull request for $HEAD_BRANCH."; exit 0; fi
+          if [ "$(jq -r .headRefOid <<<"$pr")" != "$TESTED_SHA" ]; then
+            echo "The pull request has moved on since this test run; its next run will decide."
+            exit 0
+          fi
+          echo "number=$(jq -r .number <<<"$pr")" >> "$GITHUB_OUTPUT"
+          { echo 'title<<EOF'; jq -r .title <<<"$pr"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+
+      - name: Decide
+        id: policy
+        if: steps.pr.outputs.number != ''
+        env:
+          TITLE: ${{ steps.pr.outputs.title }}
+        run: |
+          set +e
+          verdict="$(node scripts/update-policy.mjs "$TITLE")"
+          echo "merge=$([ $? -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+          echo "$verdict"
+
+      - name: Merge and publish
+        if: steps.policy.outputs.merge == 'true'
+        run: |
+          # --match-head-commit refuses to merge anything but the tested commit.
+          gh pr merge "${{ steps.pr.outputs.number }}" --squash --match-head-commit "$TESTED_SHA"
+          # A merge made with this workflow's token does not start other
+          # workflows by itself; ask CI to test and publish the result.
+          gh workflow run ci.yml --ref "${{ github.event.repository.default_branch }}"
+
+      - name: Leave major updates for review
+        if: steps.policy.outputs.merge == 'false'
+        env:
+          VERDICT: ${{ steps.policy.outputs.verdict }}
+        run: |
+          number="${{ steps.pr.outputs.number }}"
+          if gh pr view "$number" --json labels --jq '.labels[].name' | grep -qx needs-review; then exit 0; fi
+          gh label create needs-review --color FBCA04 --description "An update that waits for a person" 2>/dev/null || true
+          gh pr edit "$number" --add-label needs-review
+          gh pr comment "$number" --body "All tests pass, but this was not merged automatically ($VERDICT). Bigger updates can change how things work, so they wait for a quick review."

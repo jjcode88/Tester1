@@ -9,6 +9,9 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'off',
+    // Lets a machine with a different pre-installed Chromium run the tests;
+    // CI installs the matching browser and leaves this unset.
+    launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },

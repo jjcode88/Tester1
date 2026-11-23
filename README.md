@@ -94,6 +94,15 @@ public API.
 GitHub runs scheduled workflows on the default branch only, and pauses them in
 repositories with no activity for 60 days.
 
+## Automatic updates
+
+Dependabot checks every week for newer versions of the libraries and GitHub
+Actions the project uses. Small updates (patch and minor versions) are merged
+by [`auto-update.yml`](.github/workflows/auto-update.yml) once the whole test
+suite passes, and then published. Major versions, which can change behaviour,
+stay open with a `needs-review` label. The rule is
+[`scripts/update-policy.mjs`](scripts/update-policy.mjs).
+
 ## Project layout
 
 ```
