@@ -75,7 +75,8 @@ export default defineConfig({
     __APP_BUILT_AT__: JSON.stringify(builtAt),
   },
   build: {
-    target: 'es2022',
+    // Reaches back to iOS 14 Safari, so older iPhones that haven't updated still run the app.
+    target: ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'],
     sourcemap: true,
   },
   server: { port: 5173, strictPort: true },
