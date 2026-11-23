@@ -140,3 +140,36 @@ test('the dark theme can be forced from preferences', async ({ page }) => {
   const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(background).toBe('rgb(13, 16, 21)');
 });
+
+test('backs up to a file, reminds when due, and restores on a fresh device', async ({ page, browser }) => {
+  // Log one real session so there is something worth backing up.
+  await page.getByRole('button', { name: /^Upper/ }).click();
+  const bench = page.getByRole('region', { name: 'Bench press' });
+  await bench.getByRole('textbox', { name: 'Set 1 weight in kg' }).fill('70');
+  await bench.getByRole('textbox', { name: 'Set 1 reps' }).fill('8');
+  await bench.getByRole('checkbox', { name: 'Set 1 done' }).click();
+  await page.getByRole('button', { name: 'Finish session' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  const reminder = page.getByTestId('backup-reminder');
+  await expect(reminder).toBeVisible();
+
+  // Desktop browsers here have no file sharing, so the backup downloads.
+  const [download] = await Promise.all([page.waitForEvent('download'), reminder.getByRole('button', { name: 'Back up now' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^cadence-backup-\d{4}-\d{2}-\d{2}\.json$/);
+  await expect(reminder).toBeHidden();
+  const file = await download.path();
+
+  await page.goto('./#account');
+  await expect(page.getByTestId('last-backup')).toContainText('Last backup just now');
+
+  // A brand-new device restores it.
+  const fresh = await browser.newContext();
+  const other = await fresh.newPage();
+  await other.goto('./#account');
+  await other.locator('#import-file').setInputFiles(file);
+  await expect(other.getByText('Restored 1 session and 0 body weight readings.')).toBeVisible();
+  await other.goto('./#history');
+  await expect(other.getByText('1 session logged')).toBeVisible();
+  await fresh.close();
+});

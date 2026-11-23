@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { store, useAppState, useWorkouts } from '../app';
+import { backUpNow, store, useAppState, useCloud, useWorkouts } from '../app';
+import { backupDue } from '../lib/backup';
 import { ColumnChart } from '../components/charts';
 import { WeekBar } from '../components/graphics';
 import { Icon } from '../components/Icon';
@@ -21,6 +22,7 @@ export function loadSampleData() {
 export function Today() {
   const state = useAppState();
   const { completed, active } = useWorkouts();
+  const cloud = useCloud();
   const now = useNow(30_000);
   const { units, weeklyGoal } = state.settings;
 
@@ -79,6 +81,22 @@ export function Today() {
           <span className="small muted">You are looking at sample data, not your own training.</span>
           <button type="button" className="btn btn-sm" onClick={() => store.clearSample()}>
             Remove sample data
+          </button>
+        </div>
+      )}
+
+      {!active && backupDue(state, now, cloud.userId !== null) && (
+        <div className="banner banner-plain" role="note" data-testid="backup-reminder">
+          <div className="stack" style={{ gap: 2, flex: '1 1 240px' }}>
+            <strong>Back up your training</strong>
+            <span className="small muted">
+              {state.settings.lastBackupAt
+                ? 'You have new workouts since your last backup a while ago.'
+                : 'Your workouts are only saved on this device. A backup keeps them safe if it is lost or reset.'}
+            </span>
+          </div>
+          <button type="button" className="btn" onClick={() => void backUpNow()}>
+            Back up now
           </button>
         </div>
       )}

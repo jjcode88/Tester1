@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { cloud, store, useAppState, useCloud } from '../app';
+import { backUpNow, cloud, store, useAppState, useCloud } from '../app';
 import { ConfirmButton, Pill, Segmented, Stepper } from '../components/common';
 import { Icon } from '../components/Icon';
 import { cloudConfigured, config } from '../config';
@@ -67,7 +67,7 @@ function SyncCard() {
               <>
                 {' '}
                 on{' '}
-                <a href={`https://github.com/${config.githubRepo}#connect-supabase`} target="_blank" rel="noreferrer">
+                <a href={`https://github.com/${config.githubRepo}/blob/HEAD/docs/SETUP.md#5-supabase--accounts-and-cloud-sync`} target="_blank" rel="noreferrer">
                   GitHub
                 </a>
               </>
@@ -273,34 +273,16 @@ function Preferences() {
 
 function DataCard() {
   const state = useAppState();
+  const now = useNow(60_000);
   const fileInput = useRef<HTMLInputElement>(null);
   const hasSample = state.sampleIds.length > 0;
-
-  function exportFile() {
-    const json = JSON.stringify(store.exportData(), null, 2);
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cadence-export-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  async function copyExport() {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(store.exportData()));
-      toast('Export copied to the clipboard.');
-    } catch {
-      toast('Copying is blocked here. Use “Download export” instead.', 'bad');
-    }
-  }
 
   async function importFile(file: File) {
     try {
       const counts = store.importData(await file.text());
-      toast(`Imported ${counts.workouts} sessions and ${counts.body} body weight readings.`);
+      toast(`Restored ${countLabel(counts.workouts, 'session', 'sessions')} and ${countLabel(counts.body, 'body weight reading', 'body weight readings')}.`);
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'That file could not be imported.', 'bad');
+      toast(error instanceof Error ? error.message : 'That file could not be restored.', 'bad');
     }
   }
 
@@ -311,20 +293,28 @@ function DataCard() {
           Your data
         </h2>
         <span className="small faint">
-          {Object.values(state.workouts).filter((w) => !w.deletedAt).length} sessions ·{' '}
-          {Object.values(state.body).filter((b) => !b.deletedAt).length} body weight readings
+          {countLabel(Object.values(state.workouts).filter((w) => !w.deletedAt).length, 'session', 'sessions')} ·{' '}
+          {countLabel(Object.values(state.body).filter((b) => !b.deletedAt).length, 'body weight reading', 'body weight readings')}
         </span>
       </div>
-      <div className="row">
-        <button type="button" className="btn" onClick={exportFile}>
-          Download export
-        </button>
-        <button type="button" className="btn" onClick={() => void copyExport()}>
-          Copy export
-        </button>
-        <button type="button" className="btn" onClick={() => fileInput.current?.click()}>
-          Import a file
-        </button>
+      <div className="row spread">
+        <div className="stack" style={{ gap: 2, flex: '1 1 220px' }}>
+          <strong>Backups</strong>
+          <span className="small muted" data-testid="last-backup">
+            {state.settings.lastBackupAt
+              ? `Last backup ${relativeTime(new Date(state.settings.lastBackupAt), now).replace(/^(\d)/, 'on $1')}.`
+              : 'No backup from this device yet.'}{' '}
+            On an iPhone, choose Save to Files and pick iCloud Drive.
+          </span>
+        </div>
+        <div className="row">
+          <button type="button" className="btn btn-primary" onClick={() => void backUpNow()}>
+            Back up now
+          </button>
+          <button type="button" className="btn" onClick={() => fileInput.current?.click()}>
+            Restore a backup
+          </button>
+        </div>
         <input
           ref={fileInput}
           id="import-file"
@@ -366,7 +356,8 @@ function DataCard() {
         <div className="stack" style={{ gap: 2, flex: '1 1 220px' }}>
           <strong>Erase this device</strong>
           <span className="small muted">
-            Removes everything stored in this browser. Anything already synced stays in your account.
+            Removes everything stored in this browser.{' '}
+            {cloudConfigured ? 'Anything already synced stays in your account.' : 'Back up first if you want to keep it.'}
           </span>
         </div>
         <ConfirmButton
@@ -381,4 +372,8 @@ function DataCard() {
       </div>
     </section>
   );
+}
+
+function countLabel(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
 }

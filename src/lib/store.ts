@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weeklyGoal: 3,
   restSeconds: 120,
   theme: 'system',
+  lastBackupAt: null,
   // Defaults carry the epoch so settings saved on another device always win.
   updatedAt: EPOCH,
 };

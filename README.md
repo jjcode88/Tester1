@@ -17,6 +17,14 @@ app's own **Status** page.
 | **Sentry** | Unhandled errors and failed syncs, tagged with the release and commit, with source maps uploaded at build time | [`src/lib/monitoring.ts`](src/lib/monitoring.ts) |
 | **Uptime monitor** | Checks the live site every 15 minutes; opens an `incident` issue when it goes down and closes it when it recovers | [`.github/workflows/uptime.yml`](.github/workflows/uptime.yml) |
 
+## Backups
+
+Without an account, workouts live only in the browser that logged them.
+**Account → Back up now** saves everything to one file: on a phone it opens the
+share sheet (choose *Save to Files → iCloud Drive*, or Google Drive), and on a
+computer it downloads. **Restore a backup** loads it on any device. If there is
+new training and no backup for a week, the Today screen reminds you.
+
 ## Run it locally
 
 ```bash
@@ -65,45 +73,10 @@ forge and delete each other's rows ([`supabase/tests/10_policies.sql`](supabase/
 
 The site is published at `https://<owner>.github.io/<repo>/`.
 
-## Connect Supabase
+## Connect Supabase, Sentry, Cloudflare, Resend and UptimeRobot
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. In **Settings → Secrets and variables → Actions** add:
-
-   | Kind | Name | Value |
-   | --- | --- | --- |
-   | Variable | `SUPABASE_URL` | Project Settings → API → Project URL |
-   | Variable | `SUPABASE_ANON_KEY` | Project Settings → API → anon / publishable key |
-   | Variable | `SUPABASE_PROJECT_REF` | The ID in the project URL |
-   | Secret | `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
-   | Secret | `SUPABASE_DB_PASSWORD` | The database password you chose |
-
-3. In Supabase, **Authentication → URL Configuration**: set **Site URL** to your
-   Pages URL so confirmation and sign-in links come back to the app.
-4. Push to the default branch. The `migrate` job applies
-   [`supabase/migrations`](supabase/migrations) before the site deploys.
-
-The anon key is safe in the browser: it can only do what the row-level security
-policies allow, which is each signed-in user reading and writing their own rows.
-
-## Connect Sentry
-
-1. Create a **React** project in [Sentry](https://sentry.io).
-2. Add these in **Settings → Secrets and variables → Actions**:
-
-   | Kind | Name | Value |
-   | --- | --- | --- |
-   | Variable | `SENTRY_DSN` | Project Settings → Client Keys |
-   | Variable | `SENTRY_ORG` | Organization slug |
-   | Variable | `SENTRY_PROJECT` | Project slug |
-   | Secret | `SENTRY_AUTH_TOKEN` | An org auth token with release permissions |
-
-3. Push. Builds now create a Sentry release named `cadence@<version>+<commit>`,
-   upload source maps (and remove them from the public site), and mark the
-   deploy. Use **Send a test error** on the Status page to confirm events arrive.
-
-Error reports carry no training data, no IP address and no request bodies. A
-signed-in user is identified by their account ID only.
+Step-by-step instructions, written for people who have never done it before,
+are in **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## Uptime monitoring
 

@@ -57,6 +57,8 @@ export interface Settings {
   restSeconds: number;
   /** Device-only preference; never synced. */
   theme: ThemePref;
+  /** Device-only: when this device last saved a backup file. */
+  lastBackupAt: string | null;
   updatedAt: string;
 }
 
