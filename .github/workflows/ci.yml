@@ -95,21 +95,11 @@ jobs:
         if: env.SUPABASE_DB_URL == ''
         run: echo "::notice title=Supabase not connected::Add the SUPABASE_DB_URL secret to migrate automatically. See docs/SETUP.md."
 
-  deploy:
-    name: Deploy to GitHub Pages
+  build-site:
+    name: Build site for publishing
     needs: [migrate]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.pages.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,12 +122,36 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+          # One name per attempt, so "Re-run failed jobs" never finds two.
+          name: github-pages-${{ github.run_attempt }}
+
+  deploy:
+    name: Deploy to GitHub Pages
+    # A separate job, as in GitHub's own template: by the time it starts, the
+    # uploaded site is registered and can be found.
+    needs: [build-site]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
       - id: pages
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
       - name: Smoke-test the live site
         run: |
           scripts/check-health.sh "${{ steps.pages.outputs.page_url }}"
